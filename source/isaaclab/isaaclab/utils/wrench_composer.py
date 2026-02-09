@@ -66,6 +66,29 @@ class WrenchComposer:
 
         # Flag to check if the link poses have been updated.
         self._link_poses_updated = False
+        # Cache of the last set inputs so global wrenches can be recomposed with updated link poses.
+        self._cached_set_inputs: dict | None = None
+
+    def _refresh_cached_wrench_if_global(self) -> None:
+        """Recompose cached global wrench with the latest link poses.
+
+        Permanent wrenches set in the global frame need to be projected every step; otherwise, the
+        cached body-frame wrench drifts as the body rotates.
+        """
+        if not self._cached_set_inputs or not self._cached_set_inputs.get("is_global", False):
+            return
+
+        cached_inputs = self._cached_set_inputs
+        # Force a refresh of link poses before recomposition.
+        self._link_poses_updated = False
+        self.set_forces_and_torques(
+            forces=cached_inputs.get("forces"),
+            torques=cached_inputs.get("torques"),
+            positions=cached_inputs.get("positions"),
+            body_ids=cached_inputs.get("body_ids"),
+            env_ids=cached_inputs.get("env_ids"),
+            is_global=True,
+        )
 
     @property
     def active(self) -> bool:
@@ -218,6 +241,14 @@ class WrenchComposer:
             device=self.device,
         )
 
+    def refresh_cached_global_wrench(self) -> None:
+        """Refresh cached global wrench using latest poses (no operation for local wrenches).
+
+        This should be called once per simulation step before applying any permanent wrench so that
+        world-frame wrenches keep their original direction even if the body rotated after being set.
+        """
+        self._refresh_cached_wrench_if_global()
+
     def set_forces_and_torques(
         self,
         forces: wp.array | torch.Tensor | None = None,
@@ -274,6 +305,7 @@ class WrenchComposer:
         # Resolve remaining inputs
         # -- don't launch if no forces or torques are provided
         if forces is None and torques is None:
+            self._cached_set_inputs = None
             return
         if forces is None:
             forces = wp.empty((0, 0), dtype=wp.vec3f, device=self.device)
@@ -287,6 +319,16 @@ class WrenchComposer:
             positions = wp.empty((0, 0), dtype=wp.vec3f, device=self.device)
         elif isinstance(positions, torch.Tensor):
             positions = wp.from_torch(positions, dtype=wp.vec3f)
+
+        # Cache last set inputs so we can re-project global wrenches each step.
+        self._cached_set_inputs = {
+            "forces": forces,
+            "torques": torques,
+            "positions": positions,
+            "body_ids": body_ids,
+            "env_ids": env_ids,
+            "is_global": is_global,
+        }
 
         # Get the link positions and quaternions
         if not self._link_poses_updated:
@@ -347,3 +389,4 @@ class WrenchComposer:
             self._composed_torque_b[indices].zero_()
 
         self._link_poses_updated = False
+        self._cached_set_inputs = None

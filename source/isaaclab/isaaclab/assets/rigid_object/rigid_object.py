@@ -140,6 +140,8 @@ class RigidObject(AssetBase):
         """
         # write external wrench
         if self._instantaneous_wrench_composer.active or self._permanent_wrench_composer.active:
+            # Reproject cached global permanent wrench to current link frame to keep world alignment.
+            self._permanent_wrench_composer.refresh_cached_global_wrench()
             if self._instantaneous_wrench_composer.active:
                 # Compose instantaneous wrench with permanent wrench
                 self._instantaneous_wrench_composer.add_forces_and_torques(
