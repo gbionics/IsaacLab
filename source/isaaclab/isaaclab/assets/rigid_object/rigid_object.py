@@ -457,7 +457,16 @@ class RigidObject(AssetBase):
         else:
             env_ids = wp.from_torch(env_ids.to(torch.int32), dtype=wp.int32)
         # -- body_ids
-        body_ids = self._ALL_BODY_INDICES_WP
+        if body_ids is None:
+            body_ids = self._ALL_BODY_INDICES_WP
+        elif isinstance(body_ids, slice):
+            body_ids = wp.from_torch(
+                torch.arange(self.num_bodies, dtype=torch.int32, device=self.device)[body_ids], dtype=wp.int32
+            )
+        elif not isinstance(body_ids, torch.Tensor):
+            body_ids = wp.array(body_ids, dtype=wp.int32, device=self.device)
+        else:
+            body_ids = wp.from_torch(body_ids.to(torch.int32), dtype=wp.int32)
 
         # Write to wrench composer
         self._permanent_wrench_composer.set_forces_and_torques(
