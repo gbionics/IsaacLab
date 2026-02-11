@@ -307,19 +307,22 @@ wp.overload(
 
 
 @wp.func
-def cast_to_link_frame(position: wp.vec3f, link_position: wp.vec3f, is_global: bool) -> wp.vec3f:
+def cast_to_link_frame(
+    position: wp.vec3f, link_position: wp.vec3f, link_quat: wp.quatf, is_global: bool
+) -> wp.vec3f:
     """Casts a position to the link frame of the body.
 
     Args:
         position: The position to cast.
         link_position: The link frame position.
+        link_quat: The link frame quaternion.
         is_global: Whether the position is in the global frame.
 
     Returns:
         The position in the link frame of the body.
     """
     if is_global:
-        return position - link_position
+        return wp.quat_rotate_inv(link_quat, position - link_position)
     else:
         return position
 
@@ -402,7 +405,10 @@ def add_forces_and_torques_at_position(
         if positions:
             composed_torques_b[env_ids[tid_env], body_ids[tid_body]] += wp.skew(
                 cast_to_link_frame(
-                    positions[tid_env, tid_body], link_positions[env_ids[tid_env], body_ids[tid_body]], is_global
+                    positions[tid_env, tid_body],
+                    link_positions[env_ids[tid_env], body_ids[tid_body]],
+                    link_quaternions[env_ids[tid_env], body_ids[tid_body]],
+                    is_global,
                 )
             ) @ cast_force_to_link_frame(
                 forces[tid_env, tid_body], link_quaternions[env_ids[tid_env], body_ids[tid_body]], is_global
@@ -462,7 +468,10 @@ def set_forces_and_torques_at_position(
         if positions:
             composed_torques_b[env_ids[tid_env], body_ids[tid_body]] = wp.skew(
                 cast_to_link_frame(
-                    positions[tid_env, tid_body], link_positions[env_ids[tid_env], body_ids[tid_body]], is_global
+                    positions[tid_env, tid_body],
+                    link_positions[env_ids[tid_env], body_ids[tid_body]],
+                    link_quaternions[env_ids[tid_env], body_ids[tid_body]],
+                    is_global,
                 )
             ) @ cast_force_to_link_frame(
                 forces[tid_env, tid_body], link_quaternions[env_ids[tid_env], body_ids[tid_body]], is_global
